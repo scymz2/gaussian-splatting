@@ -257,6 +257,7 @@ if __name__ == "__main__":
     lp = ModelParams(parser)
     op = OptimizationParams(parser)
     pp = PipelineParams(parser)
+    # 输入解析器可识别参数规则
     parser.add_argument('--ip', type=str, default="127.0.0.1")
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
@@ -268,11 +269,13 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
     args = parser.parse_args(sys.argv[1:])
+    # 如果没有指定保存迭代次数，则将最后一次迭代次数添加到保存迭代次数列表中
     args.save_iterations.append(args.iterations)
     
     print("Optimizing " + args.model_path)
 
     # Initialize system state (RNG)
+    # 初始化系统状态（随机数生成器）
     safe_state(args.quiet)
 
     # Start GUI server, configure and run training
