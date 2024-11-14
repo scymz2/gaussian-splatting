@@ -46,6 +46,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         sys.exit(f"Trying to use sparse adam but it is not installed, please install the correct rasterizer using pip install [3dgs_accel].")
 
     first_iter = 0
+    # tensorboard writer
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree, opt.optimizer_type)
     scene = Scene(dataset, gaussians)
@@ -191,6 +192,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
 def prepare_output_and_logger(args):    
     if not args.model_path:
+        # 首先，检查是否设置了环境变量 OAR_JOB_ID（这通常用于分布式或集群运行环境）。
+        # 如果OAR_JOB_ID存在，就将其值赋给unique_str，否则生成一个新的UUID字符串，并将它赋值给unique_str
         if os.getenv('OAR_JOB_ID'):
             unique_str=os.getenv('OAR_JOB_ID')
         else:
@@ -199,7 +202,9 @@ def prepare_output_and_logger(args):
         
     # Set up output folder
     print("Output folder: {}".format(args.model_path))
+    # 使用 os.makedirs 创建输出文件夹，如果路径已经存在，exist_ok=True 参数会确保不会报错。
     os.makedirs(args.model_path, exist_ok = True)
+    # 保存配置参数到文件
     with open(os.path.join(args.model_path, "cfg_args"), 'w') as cfg_log_f:
         cfg_log_f.write(str(Namespace(**vars(args))))
 
@@ -275,12 +280,13 @@ if __name__ == "__main__":
     print("Optimizing " + args.model_path)
 
     # Initialize system state (RNG)
-    # 初始化系统状态（随机数生成器）
+    # 初始化系统状态（随机数生成器），设置一个固定的随机种子
     safe_state(args.quiet)
 
     # Start GUI server, configure and run training
     if not args.disable_viewer:
         network_gui.init(args.ip, args.port)
+    # 启动异常检测一场找梯度计算中的异常
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
     training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
 

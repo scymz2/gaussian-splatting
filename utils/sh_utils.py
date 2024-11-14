@@ -112,6 +112,9 @@ def eval_sh(deg, sh, dirs):
     return result
 
 def RGB2SH(rgb):
+    """
+    这个函数 RGB2SH 是一种简单的 RGB 颜色到球谐函数（Spherical Harmonics, SH）系数的转换方法。
+    """
     return (rgb - 0.5) / C0
 
 def SH2RGB(sh):

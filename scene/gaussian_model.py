@@ -30,12 +30,23 @@ except:
 class GaussianModel:
 
     def setup_functions(self):
+        # 该方法设置用于不同属性的激活函数，如缩放、旋转、不透明度等。
         def build_covariance_from_scaling_rotation(scaling, scaling_modifier, rotation):
+            """
+            这个公式是计算高斯分布的放射变换的， w = Ax + b, A是仿射矩阵， A可以用旋转和缩放矩阵来表示， A = RS, Σ=A*I*A^T, 
+            scaling: 原始的缩放因子。通常是一个数值，表示将数据进行缩放的比例
+            scaling_modifier: 缩放的修正系数。通过与scaling相乘来调整最终的缩放量
+            rotation: 旋转矩阵，定义了需要应用到数据的旋转变换。该矩阵由于调整方向
+            """
+            # 该函数通过缩放和旋转构建协方差矩阵。
             L = build_scaling_rotation(scaling_modifier * scaling, rotation)
+            # 计算投影后高斯的协方差矩阵
             actual_covariance = L @ L.transpose(1, 2)
+            # 提取协方差矩阵中的对称部分（右上半）， 变成一个[:, n!]的向量, n取决于协方差矩阵的维度。
             symm = strip_symmetric(actual_covariance)
             return symm
         
+        # 为不同的属性定义激活函数。缩放激活函数是指数函数，逆缩放激活函数是对数函数， 旋转激活函数是标准化函数，不透明度激活函数是sigmoid函数。
         self.scaling_activation = torch.exp
         self.scaling_inverse_activation = torch.log
 
@@ -51,7 +62,7 @@ class GaussianModel:
         self.active_sh_degree = 0
         self.optimizer_type = optimizer_type
         self.max_sh_degree = sh_degree  
-        self._xyz = torch.empty(0)
+        self._xyz = torch.empty(0) # placeholder
         self._features_dc = torch.empty(0)
         self._features_rest = torch.empty(0)
         self._scaling = torch.empty(0)
@@ -63,9 +74,10 @@ class GaussianModel:
         self.optimizer = None
         self.percent_dense = 0
         self.spatial_lr_scale = 0
-        self.setup_functions()
+        self.setup_functions() # 设置激活函数
 
     def capture(self):
+        # 用于捕获当前模型的状态，返回一个包含模型重要属性的元组，便于保存和恢复模型状态。
         return (
             self.active_sh_degree,
             self._xyz,
@@ -82,6 +94,7 @@ class GaussianModel:
         )
     
     def restore(self, model_args, training_args):
+        # 用于恢复模型状态，接收一个元组，包含模型的重要属性，以及训练参数。
         (self.active_sh_degree, 
         self._xyz, 
         self._features_dc, 
@@ -99,6 +112,8 @@ class GaussianModel:
         self.denom = denom
         self.optimizer.load_state_dict(opt_dict)
 
+    # @propoerty 装饰器用于将一个方法转换为只读属性，该方法的返回值将被当作属性访问， 本质就是一系列getter方法。
+        
     @property
     def get_scaling(self):
         return self.scaling_activation(self._scaling)
@@ -134,20 +149,37 @@ class GaussianModel:
         return self._exposure
 
     def get_exposure_from_name(self, image_name):
+        """
+        该函数返回指定图像的曝光值。
+        image_name: 图像名称
+        """
         if self.pretrained_exposures is None:
             return self._exposure[self.exposure_mapping[image_name]]
         else:
             return self.pretrained_exposures[image_name]
     
     def get_covariance(self, scaling_modifier = 1):
+        """
+        用于获取协方差矩阵
+        """
         return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)
 
     def oneupSHdegree(self):
+        """
+        oneupSHdegree 方法将当前的球谐基函数阶数 active_sh_degree 增加1，但不会超过最大值 max_sh_degree。
+        """
         if self.active_sh_degree < self.max_sh_degree:
             self.active_sh_degree += 1
 
     def create_from_pcd(self, pcd : BasicPointCloud, cam_infos : int, spatial_lr_scale : float):
+        """
+        用点云数据初始化模型
+        pcd: 点云数据
+        cam_infos: 相机信息
+        spatial_lr_scale: 空间学习率缩放因子, 用于调整空间学习率
+        """
         self.spatial_lr_scale = spatial_lr_scale
+        # fused指的是融合的点云数据
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
         fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())
         features = torch.zeros((fused_color.shape[0], 3, (self.max_sh_degree + 1) ** 2)).float().cuda()
