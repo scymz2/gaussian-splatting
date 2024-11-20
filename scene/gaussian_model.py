@@ -33,7 +33,7 @@ class GaussianModel:
         # 该方法设置用于不同属性的激活函数，如缩放、旋转、不透明度等。
         def build_covariance_from_scaling_rotation(scaling, scaling_modifier, rotation):
             """
-            这个公式是计算高斯分布的放射变换的， w = Ax + b, A是仿射矩阵， A可以用旋转和缩放矩阵来表示， A = RS, Σ=A*I*A^T, 
+            这个公式是计算高斯分布的仿射变换的， w = Ax + b, A是仿射矩阵， A可以用旋转和缩放矩阵来表示， A = RS, Σ=A*I*A^T, 
             scaling: 原始的缩放因子。通常是一个数值，表示将数据进行缩放的比例
             scaling_modifier: 缩放的修正系数。通过与scaling相乘来调整最终的缩放量
             rotation: 旋转矩阵，定义了需要应用到数据的旋转变换。该矩阵由于调整方向
@@ -182,17 +182,25 @@ class GaussianModel:
         # fused指的是融合的点云数据
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
         fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())
+        # 创建一个向量用来存储特征，特征的维度是 (P, 3, (max_sh_degree + 1) ** 2)， 其中 P 是点的数量， 3 是颜色通道数， (max_sh_degree + 1) ** 2 是球谐基函数的数量。
         features = torch.zeros((fused_color.shape[0], 3, (self.max_sh_degree + 1) ** 2)).float().cuda()
+        # 将fused_color赋值给features张量的第一个SH系数（索引为0）的前三个通道。
         features[:, :3, 0 ] = fused_color
+        # 将特征张量中除第一个SH系数之外的部分初始化为0。
         features[:, 3:, 1:] = 0.0
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
 
+        # distCUDA2是一个自定义的CUDA加速函数，用于计算距离的平方。
+        # torch.clamp_min(..., 1e-7)将所有距离平方小于1e-7的值截断为1e-7，防止后续计算中出现数值问题（如对数运算中的负无穷）
         dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
+        # 计算每个点的距离的平方根，然后取对数，最后将其扩展为一个形状为 (P, 3) 的张量。
         scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 3)
+        # 创建一个形状为 (P, 4) 的张量，用于存储旋转四元数，其中第一个元素为1，其余元素为0, 表示目前无旋转。
         rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
         rots[:, 0] = 1
 
+        # 创建一个形状为 (P, 1) 的张量，用于存储不透明度，初始值为0.1。
         opacities = self.inverse_opacity_activation(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
 
         self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
@@ -201,15 +209,21 @@ class GaussianModel:
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
+        # 初始化二维最大半径张量，后续计算每个点在二维平面上的最大半径
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
+        # 生成一个字典self.exposure_mapping，将相机的图像名称映射到其对应的索引。这用于快速查找特定相机的曝光参数。
         self.exposure_mapping = {cam_info.image_name: idx for idx, cam_info in enumerate(cam_infos)}
         self.pretrained_exposures = None
+        # 创建一个形状为 (C, 3, 4) 的张量，用于存储曝光值，其中 C 是相机的数量。
         exposure = torch.eye(3, 4, device="cuda")[None].repeat(len(cam_infos), 1, 1)
         self._exposure = nn.Parameter(exposure.requires_grad_(True))
 
     def training_setup(self, training_args):
+        # 将训练参数中的percent_dense赋值给self.percent_dense, 用于控制训练过程中稠密点的比例。
         self.percent_dense = training_args.percent_dense
+        # 初始化xyz_gradient_accum和denom张量，用于累计点坐标xyz的梯度。
         self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+        # 初始化分母张量，用于存储xyz的梯度的平方和。
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
 
         l = [
@@ -232,11 +246,13 @@ class GaussianModel:
 
         self.exposure_optimizer = torch.optim.Adam([self._exposure])
 
+        # 为xyz设置学习率调度器，设置参数，后续利用helper函数来获取step.
         self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init*self.spatial_lr_scale,
                                                     lr_final=training_args.position_lr_final*self.spatial_lr_scale,
                                                     lr_delay_mult=training_args.position_lr_delay_mult,
                                                     max_steps=training_args.position_lr_max_steps)
         
+        # 为曝光值设置学习率调度器，设置参数，后续利用helper函数来获取step.
         self.exposure_scheduler_args = get_expon_lr_func(training_args.exposure_lr_init, training_args.exposure_lr_final,
                                                         lr_delay_steps=training_args.exposure_lr_delay_steps,
                                                         lr_delay_mult=training_args.exposure_lr_delay_mult,
@@ -346,6 +362,10 @@ class GaussianModel:
         self.active_sh_degree = self.max_sh_degree
 
     def replace_tensor_to_optimizer(self, tensor, name):
+        '''
+        主要功能是将一个新的张量（tensor）替换到优化器（optimizer）的参数组中，并确保优化器的内部状态（如动量等）与新的张量同步。
+        这在需要动态更新模型参数时非常有用，例如在某些模型训练过程中需要重新初始化或修改特定参数时。
+        '''
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
             if group["name"] == name:
@@ -361,6 +381,10 @@ class GaussianModel:
         return optimizable_tensors
 
     def _prune_optimizer(self, mask):
+        '''
+        prune_optimizer函数的主要功能是根据给定的掩码（mask）对优化器（optimizer）管理的参数进行修剪（prune），即删除或保留参数的某些部分。
+        此操作通常用于模型压缩、剪枝或稀疏化，以减少模型的复杂度和计算资源需求。
+        '''
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
             stored_state = self.optimizer.state.get(group['params'][0], None)
@@ -379,6 +403,7 @@ class GaussianModel:
         return optimizable_tensors
 
     def prune_points(self, mask):
+        # ~取反操作符，将mask中的True变为False，False变为True
         valid_points_mask = ~mask
         optimizable_tensors = self._prune_optimizer(valid_points_mask)
 
