@@ -15,6 +15,9 @@ import numpy as np
 from typing import NamedTuple
 
 class BasicPointCloud(NamedTuple):
+    """
+    NamedTuple的特性就是可以通过属性名访问元组的元素，而不是通过索引。例如：print(basic_point_cloud.points)。
+    """
     points : np.array
     colors : np.array
     normals : np.array

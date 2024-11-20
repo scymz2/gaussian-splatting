@@ -16,6 +16,7 @@ import numpy as np
 import random
 
 def inverse_sigmoid(x):
+    # 逆sigmoid函数, 用于将值域为[0, 1]的值映射到实数域
     return torch.log(x/(1-x))
 
 def PILtoTorch(pil_image, resolution):
@@ -43,6 +44,10 @@ def get_expon_lr_func(
     :param max_steps: int, the number of steps during optimization.
     :return HoF which takes step as input
     """
+    # 这里使用了一种嵌套函数的技巧，，主要有两个优势
+    # 1.封装信息和隐藏， 嵌套函数允许将辅助功能封装在主函数内部，使得这些辅助函数不暴露在全局作用域中。这有助于减少命名空间的污染，避免命名冲突，并提高代码的模块化程度。
+    # 2. 闭包： 嵌套函数可以访问其外部函数的变量，即使外部函数已经执行完毕。这种特性称为闭包，允许创建携带环境的函数对象，常用于工厂函数、回调函数和装饰器等场景。
+    
 
     def helper(step):
         if step < 0 or (lr_init == 0.0 and lr_final == 0.0):
