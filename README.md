@@ -342,6 +342,8 @@ cmake --build build -j24 --target install
 Backwards compatibility with Focal Fossa is not fully tested, but building SIBR with CMake should still work after invoking
 ```shell
 git checkout fossa_compatibility
+cmake -Bbuild . -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
+cmake --build build -j24 --target install
 ```
 
 ### Navigation in SIBR Viewers
