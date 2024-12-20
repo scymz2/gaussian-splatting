@@ -345,6 +345,57 @@ git checkout fossa_compatibility
 cmake -Bbuild . -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
 cmake --build build -j24 --target install
 ```
+There are two bugs in the code of viewer, the first one is in Resources.cpp:
+```
+std::string Resources::getResourceFilePathName(std::string const & filename, bool & success)
+	{
+		// we assume the first element of _rscPaths if the current dir
+		// Weird bug -- GD: I have no idea why, but if I dont call this the paths dont work under linux
+		std::string installdir = sibr::getInstallDirectory();
+		// someone gave us the correct full path
+		std::ifstream rscFileTest(filename);
+		if (success = rscFileTest.good()) 
+			return filename;
+		for(std::string rscPath : _rscPaths)
+		{
+			std::string filePathName  = sibr::getInstallDirectory() + "/" + rscPath + "/" + filename;
+			std::ifstream rscFile(filePathName);
+			if (success = rscFile.good()) {
+				return filePathName;
+			}
+		}
+		return filename;
+	}
+```
+the solution is to replace:
+```
+//std::string filePathName  = sibr::getInstallDirectory() + "/" + rscPath + "/" + filename;
+```
+by
+```
+std::string filePathName  = _rscPaths[0] + "/" + rscPath + "/" + filename;
+```
+Another one is in Utils.cpp:
+```
+SIBR_SYSTEM_EXPORT std::string getInstallSubDirectory(const std::string & subfolder)
+	{
+		std::string installDirectory = getInstallDirectory();
+		std::string installSubDirectory = installDirectory + "/" + subfolder;
+		if(!directoryExists(installSubDirectory))
+		{
+			// try subdirs GD LINUX issue
+			installSubDirectory = installDirectory + "/install/" + subfolder;
+			if(!directoryExists(installSubDirectory))
+				SIBR_ERR << "Can't find subfolder " << subfolder << " in " << installDirectory << ". Please specify correct app folder as command-line option using --appPath option!" << std::endl;
+		}
+
+		return installSubDirectory;
+	}
+```
+installDirectory somehow changes after loading 3D gaussians, the solution is to make it static:
+```
+static const std::string installDirectory = getInstallDirectory();
+```
 
 ### Navigation in SIBR Viewers
 The SIBR interface provides several methods of navigating the scene. By default, you will be started with an FPS navigator, which you can control with ```W, A, S, D, Q, E``` for camera translation and ```I, K, J, L, U, O``` for rotation. Alternatively, you may want to use a Trackball-style navigator (select from the floating menu). You can also snap to a camera from the data set with the ```Snap to``` button or find the closest camera with ```Snap to closest```. The floating menues also allow you to change the navigation speed. You can use the ```Scaling Modifier``` to control the size of the displayed Gaussians, or show the initial point cloud.
