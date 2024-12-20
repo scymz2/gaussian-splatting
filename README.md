@@ -345,7 +345,7 @@ git checkout fossa_compatibility
 cmake -Bbuild . -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
 cmake --build build -j24 --target install
 ```
-There are two bugs in the code of viewer, the first one is in Resources.cpp:
+There are two bugs in the code of viewer, the first one is in Resources.cpp (https://github.com/graphdeco-inria/gaussian-splatting/issues/246):
 ```
 std::string Resources::getResourceFilePathName(std::string const & filename, bool & success)
 	{
