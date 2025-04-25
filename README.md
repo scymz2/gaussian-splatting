@@ -97,6 +97,19 @@ The optimizer uses PyTorch and CUDA extensions in a Python environment to produc
 ### Setup
 
 #### Local Setup
+直接看这个，我发现使用conda安装时总会失败，因此我们需要走这个流程：
+```
+# 先按照项目默认的方式来
+conda env create --file environment.yml
+# 然后失败了后激活gaussian_splatting环境
+conda activate gaussian_splatting
+# 使用pip安装torch
+pip install torch==1.13.1+cu116 torchvision==0.14.1+cu116 torchaudio==0.13.1 --index-url https://download.pytorch.org/whl/cu116
+# 安装子模块
+pip install ./submodules/diff-gaussian-rasterization ./submodules/simple-knn ./submodules/fused-ssim
+# 完成部署，还是比较简单的
+```
+
 
 Our default, provided install method is based on Conda package and environment management:
 ```shell
